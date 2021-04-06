@@ -25,9 +25,18 @@ module Kitchen
         include Kitchen::Docker::Helpers::ContainerHelper
 
         def parse_image_id(output)
+          docker_version = `docker info | grep 'Server Version'`.split(' ').last
+
           output.each_line do |line|
-            if line =~ /image id|build successful|successfully built/i
-              return line.split(/\s+/).last
+            case docker_version
+            when /^20/
+              if line =~ /sha256/
+                return line.split(/\s+/).last
+              end
+            else
+              if line =~ /image id|build successful|successfully built/i
+                return line.split(/\s+/).last
+              end
             end
           end
           raise ActionFailed, 'Could not parse Docker build output for image ID'
@@ -39,8 +48,15 @@ module Kitchen
         end
 
         def build_image(state, dockerfile)
+          docker_version = `docker info | grep 'Server Version'`.split(' ').last
+
           cmd = 'build'
           cmd << ' --no-cache' unless config[:use_cache]
+
+          if docker_version =~ /^20/
+            cmd << ' -q'
+          end
+
           extra_build_options = config_to_options(config[:build_options])
           cmd << " #{extra_build_options}" unless extra_build_options.empty?
           dockerfile_contents = dockerfile
